@@ -2,6 +2,7 @@ import { env } from "@/lib/env/server";
 import { VideoRepository, TranscriptRepository, Video, UserRepository } from "@/lib/db/repository";
 import { openai } from '@ai-sdk/openai';
 import { generateObject } from 'ai';
+import { fetchTranscript } from 'youtube-transcript-plus';
 import { z } from 'zod';
 import { generateSummary } from "@/lib/ai/summary";
 import { getQuickStartPrompt } from "@/lib/ai/system-prompts";
@@ -149,39 +150,15 @@ export async function fetchVideoTranscript(videoId: string) {
       return { segments, userVideo };
     }
 
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const encodedUrl = encodeURIComponent(videoUrl);
-    const response = await fetch(
-      `${env.API_BASE_URL}/youtube/transcript?videoUrl=${encodedUrl}`,
-      {
-        headers: {
-          'X-API-Key': env.API_X_HEADER_API_KEY,
-        },
-      }
-    );
+    const transcriptResult = await fetchTranscript(videoId);
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch transcript: ${response.status} ${response.statusText}`);
-    }
-
-    const transcriptResult = await response.json();
-
-    // Check if transcript content exists
-    if (!transcriptResult.content || (Array.isArray(transcriptResult.content) && transcriptResult.content.length === 0)) {
+    if (!transcriptResult || transcriptResult.length === 0) {
       throw new Error('No transcript content available')
     }
 
-    // Handle case where content is a string (plain text mode)
-    if (typeof transcriptResult.content === 'string') {
-      throw new Error('Transcript returned as plain text, expected chunks')
-    }
-
-    const segments = transcriptResult.content.map((item, index) => {
-      const startMs = item.offset;
-      const endMs = item.offset + item.duration;
-
-      const start = startMs / 1000;  // convert ms to seconds
-      const end = endMs / 1000;
+    const segments = transcriptResult.map((item, index) => {
+      const start = Number(item.offset || 0);
+      const end = start + Number(item.duration || 0);
 
       const baseDate = new Date(0)
       baseDate.setHours(0, 0, 0, 0)
