@@ -11,7 +11,6 @@ import { trackGenerateTextUsage } from '@/lib/token-tracker';
 import { UserVideoRepository } from "@/lib/db/repository";
 import { getCurrentUser } from "./auth";
 import { addSeconds, format } from "date-fns";
-import { supadata } from "@/lib/supadata";
 
 export async function generateUserVideoSummary(video: Video, segments: any[], userVideoId?: number) {
   const transcriptText = segments.map((seg: {text: string}) => seg.text);
@@ -150,9 +149,22 @@ export async function fetchVideoTranscript(videoId: string) {
       return { segments, userVideo };
     }
 
-    const transcriptResult = await supadata.youtube.transcript({
-      videoId: videoId,
-    });
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const encodedUrl = encodeURIComponent(videoUrl);
+    const response = await fetch(
+      `${env.API_BASE_URL}/youtube/transcript?videoUrl=${encodedUrl}`,
+      {
+        headers: {
+          'X-API-Key': env.API_X_HEADER_API_KEY,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transcript: ${response.status} ${response.statusText}`);
+    }
+
+    const transcriptResult = await response.json();
 
     // Check if transcript content exists
     if (!transcriptResult.content || (Array.isArray(transcriptResult.content) && transcriptResult.content.length === 0)) {
